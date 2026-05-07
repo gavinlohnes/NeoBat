@@ -1,75 +1,70 @@
-// Simple beep using Web Audio API (no files needed)
-function playBeep(freq = 900, duration = 80, volume = 0.08) {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "square";
-    osc.frequency.value = freq;
-    gain.gain.value = volume;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    setTimeout(() => {
-      osc.stop();
-      ctx.close();
-    }, duration);
-  } catch (e) {
-    // ignore if audio context fails
-  }
-}
+// ===============================
+//   BEYOND‑OS · CORE STATE
+// ===============================
 
-// Mock state for demo
-const state = {
+const mockState = {
+  threatIndex: "ELEVATED",
+  systemStatus: "SYSTEM ACTIVE",
+  rhythmPhase: "BUILD",
+
   metrics: {
-    operationalStatus: 78,
+    operational: 78,
     loadStrain: 42,
     fluidOps: 55,
-    fieldConditions: 30
+    fieldConditions: 28.1
   },
-  daily: {
-    bodyWeight: 210,
-    calories: 1200,
-    caloriesTarget: 1900,
-    protein: 110,
-    proteinTarget: 165,
-    steps: 5200,
-    stepsTarget: 10000,
-    sleepHours: 6.2
+
+  missionHierarchy: [
+    "Complete PUSH session",
+    "Hit protein target",
+    "Stay within calorie window"
+  ],
+
+  commandFlags: ["NIGHT SHIFT ACTIVE", "LOW SLEEP PRIORITY"],
+
+  protocols: [
+    "Progression: top reps → +5 lb",
+    "Fasting: 16:8 window",
+    "No ego lifting"
+  ],
+
+  fasting: {
+    status: "NO MEAL LOGGED",
+    note: "// JUST ATE"
   },
-  context: {
-    rhythmPhase: "BUILD",
-    missionHierarchy: [
-      "Complete PUSH session",
-      "Hit protein target",
-      "Stay within calorie window"
-    ],
-    commandFlags: [
-      "NIGHT SHIFT ACTIVE",
-      "LOW SLEEP PRIORITY"
-    ],
-    protocols: [
-      "Progression: top reps → +5 lb",
-      "Fasting: 16:8 window",
-      "No ego lifting"
-    ],
-    lastMealAt: null,
-    energyLevel: null,
-    sleepyNow: false,
-    missionMode: false
+
+  energy: {
+    level: 3,
+    label: "😴 // SLEEPY NOW"
   },
-  workout: {
-    sessionType: "PUSH",
-    sessionFocus: "Chest / Shoulders / Triceps",
-    nextMovement: "Bench Press · 4 x 8–10",
+
+  sleep: {
+    target: 7,
+    lastNight: 6.2
+  },
+
+  dailyMetrics: {
+    weight: 210,
+    calories: { current: 1200, target: 1900 },
+    protein: { current: 110, target: 165 },
+    steps: { current: 5200, target: 10000 }
+  },
+
+  session: {
+    type: "PUSH",
+    focus: "Chest / Shoulders / Triceps",
+    movement: "Bench Press · 4 x 8–10",
     setsLogged: 0
   },
-  prep: {
-    mealAName: "Beef & Rice",
-    mealBName: "Chicken & Potatoes",
-    started: false,
-    complete: false,
-    groceryItems: [
+
+  meals: {
+    mealA: { name: "Beef & Rice", servings: 5 },
+    mealB: { name: "Chicken & Potatoes", servings: 5 },
+    prepStatus: "Prep not started."
+  },
+
+  grocery: {
+    items: [
       "2 lb ground beef",
       "2 lb chicken breast",
       "2 cups rice",
@@ -80,318 +75,298 @@ const state = {
     ],
     estCost: 68
   },
+
+  systems: {
+    neuralLink: "SYNCED",
+    missionMode: "NIGHT SHIFT"
+  },
+
   env: {
     stress: 32,
-    volatility: 24,
-    temp: 71,
-    humidity: 46
-  },
-  ui: {
-    threatIndex: "LOW",
-    pulseLine: 0
+    noise: 24,
+    temp: "71°F",
+    humidity: "46%"
   }
 };
 
-// Threat index + pulse line logic
-function computeThreatIndex(state) {
-  const { loadStrain, fluidOps, fieldConditions } = state.metrics;
-  let score = 0;
-  score += loadStrain * 0.4;
-  score += (100 - fluidOps) * 0.3;
-  score += fieldConditions * 0.3;
+// ===============================
+//   TIMESTAMP FORMATTER
+// ===============================
 
-  if (score < 35) return "LOW";
-  if (score < 70) return "ELEVATED";
-  return "CRITICAL";
+function formatTimestamp() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const date = `${pad(now.getMonth() + 1)}/${pad(now.getDate())}/${now.getFullYear()}`;
+  const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  return `${date}, ${time}`;
 }
 
-function computePulseLine(state) {
-  const { loadStrain, fieldConditions } = state.metrics;
-  let val = (loadStrain * 0.6 + fieldConditions * 0.4);
-  if (val < 10) val = 10;
-  if (val > 100) val = 100;
-  return val;
-}
+// ===============================
+//   RENDER: HUD SCREEN
+// ===============================
 
-function generateDiagnosticLine(state) {
-  const os = state.metrics.operationalStatus;
-  const ls = state.metrics.loadStrain;
-  const fo = state.metrics.fluidOps;
-  const env = state.metrics.fieldConditions;
-
-  if (ls > 80) return "LOADSTRAIN CRITICAL. REDUCE PROTOCOL INTENSITY.";
-  if (fo < 30) return "FLUIDOPS INSUFFICIENT. INTAKE RECOMMENDED.";
-  if (os < 40) return "OPERATIONALSTATUS UNSTABLE. MONITOR CLOSELY.";
-  if (env > 70) return "FIELDCONDITIONS VOLATILE. ADJUST MISSION PARAMETERS.";
-
-  return "NO ANOMALIES DETECTED.";
-}
-
-// Render HUD
 function renderHUD() {
-  // Timestamp
-  document.getElementById("timestamp").textContent =
-    new Date().toLocaleString();
+  document.getElementById("threatValue").textContent = mockState.threatIndex;
+  document.getElementById("systemStatus").textContent = mockState.systemStatus;
+  document.getElementById("timestamp").textContent = formatTimestamp();
 
-  // Threat + pulse
-  state.ui.threatIndex = computeThreatIndex(state);
-  state.ui.pulseLine = computePulseLine(state);
+  document.getElementById("metricOperational").textContent =
+    mockState.metrics.operational + "%";
+  document.getElementById("metricLoadStrain").textContent =
+    mockState.metrics.loadStrain + "%";
+  document.getElementById("metricFluidOps").textContent =
+    mockState.metrics.fluidOps + "%";
+  document.getElementById("metricFieldConditions").textContent =
+    mockState.metrics.fieldConditions.toFixed(1) + "%";
 
-  const threatEl = document.getElementById("threatIndex");
-  threatEl.textContent = `THREAT INDEX: ${state.ui.threatIndex}`;
-  threatEl.classList.remove("threat-low", "threat-elevated", "threat-critical");
+  document.getElementById("rhythmPhase").textContent = mockState.rhythmPhase;
 
-  if (state.ui.threatIndex === "LOW") {
-    threatEl.style.borderColor = "#00ff88";
-    threatEl.style.color = "#00ff88";
-  } else if (state.ui.threatIndex === "ELEVATED") {
-    threatEl.style.borderColor = "#ffcc00";
-    threatEl.style.color = "#ffcc00";
-  } else {
-    threatEl.style.borderColor = "#ff0033";
-    threatEl.style.color = "#ff0033";
-  }
-
-  document.getElementById("pulseLine").style.width =
-    `${state.ui.pulseLine}%`;
-
-  // Primary metrics
-  document.getElementById("operationalStatus").textContent =
-    `${state.metrics.operationalStatus}%`;
-  document.getElementById("loadStrain").textContent =
-    `${state.metrics.loadStrain}%`;
-  document.getElementById("fluidOps").textContent =
-    `${state.metrics.fluidOps}%`;
-  document.getElementById("fieldConditions").textContent =
-    `${state.metrics.fieldConditions}%`;
-
-  // Secondary band
-  document.getElementById("rhythmPhase").textContent =
-    state.context.rhythmPhase;
-
-  const mhEl = document.getElementById("missionHierarchy");
-  mhEl.innerHTML = "";
-  state.context.missionHierarchy.forEach(item => {
+  const missionList = document.getElementById("missionList");
+  missionList.innerHTML = "";
+  mockState.missionHierarchy.forEach((item) => {
     const li = document.createElement("li");
     li.textContent = item;
-    mhEl.appendChild(li);
+    missionList.appendChild(li);
   });
 
-  const cfEl = document.getElementById("commandFlags");
-  cfEl.innerHTML = "";
-  state.context.commandFlags.forEach(item => {
+  const flagList = document.getElementById("flagList");
+  flagList.innerHTML = "";
+  mockState.commandFlags.forEach((item) => {
     const li = document.createElement("li");
     li.textContent = item;
-    cfEl.appendChild(li);
+    flagList.appendChild(li);
   });
 
-  const protoEl = document.getElementById("protocols");
-  protoEl.innerHTML = "";
-  state.context.protocols.forEach(item => {
+  const protocolList = document.getElementById("protocolList");
+  protocolList.innerHTML = "";
+  mockState.protocols.forEach((item) => {
     const li = document.createElement("li");
     li.textContent = item;
-    protoEl.appendChild(li);
+    protocolList.appendChild(li);
   });
+}
 
-  // Daily metrics
-  document.getElementById("bodyWeight").textContent =
-    state.daily.bodyWeight;
-  document.getElementById("calories").textContent =
-    state.daily.calories;
-  document.getElementById("caloriesTarget").textContent =
-    state.daily.caloriesTarget;
-  document.getElementById("protein").textContent =
-    state.daily.protein;
-  document.getElementById("proteinTarget").textContent =
-    state.daily.proteinTarget;
-  document.getElementById("steps").textContent =
-    state.daily.steps;
-  document.getElementById("stepsTarget").textContent =
-    state.daily.stepsTarget;
-  document.getElementById("sleepHours").textContent =
-    state.daily.sleepHours.toFixed(1);
+// ===============================
+//   RENDER: DAILY SCREEN
+// ===============================
 
-  // Fasting
-  const fastingStatus = document.getElementById("fastingStatus");
-  if (state.context.lastMealAt) {
-    fastingStatus.textContent =
-      "LAST MEAL: " + state.context.lastMealAt.toLocaleTimeString();
-  } else {
-    fastingStatus.textContent = "NO MEAL LOGGED";
-  }
+function renderDaily() {
+  document.getElementById("fastingStatus").textContent =
+    mockState.fasting.status;
+  document.getElementById("fastingNote").textContent =
+    mockState.fasting.note;
 
-  // Energy scale
   const energyScale = document.getElementById("energyScale");
   energyScale.innerHTML = "";
+
   for (let i = 1; i <= 10; i++) {
     const btn = document.createElement("button");
+    btn.className = "energy-button";
     btn.textContent = i;
-    if (state.context.energyLevel === i) {
-      btn.classList.add("active");
-    }
+
+    if (i === mockState.energy.level) btn.classList.add("active");
+
     btn.addEventListener("click", () => {
-      state.context.energyLevel = i;
-      playBeep(950, 60);
-      renderHUD();
+      mockState.energy.level = i;
+
+      document
+        .querySelectorAll(".energy-button")
+        .forEach((b) => b.classList.remove("active"));
+
+      btn.classList.add("active");
+
+      mockState.energy.label =
+        i <= 3
+          ? "😴 // SLEEPY"
+          : i <= 7
+          ? "⚡ // OPERATIONAL"
+          : "🔥 // WIRED";
+
+      document.getElementById("energyStatus").textContent =
+        mockState.energy.label;
     });
+
     energyScale.appendChild(btn);
   }
 
-  // Workout
+  document.getElementById("energyStatus").textContent =
+    mockState.energy.label;
+
+  document.getElementById("sleepTarget").textContent =
+    mockState.sleep.target + " hrs";
+  document.getElementById("sleepLast").textContent =
+    mockState.sleep.lastNight + " hrs";
+
+  document.getElementById("metricWeight").textContent =
+    mockState.dailyMetrics.weight + " lbs";
+
+  document.getElementById("metricCalories").textContent =
+    `${mockState.dailyMetrics.calories.current} / ${mockState.dailyMetrics.calories.target}`;
+
+  document.getElementById("metricProtein").textContent =
+    `${mockState.dailyMetrics.protein.current} / ${mockState.dailyMetrics.protein.target} g`;
+
+  document.getElementById("metricSteps").textContent =
+    `${mockState.dailyMetrics.steps.current} / ${mockState.dailyMetrics.steps.target}`;
+}
+
+// ===============================
+//   RENDER: ACTION SCREEN
+// ===============================
+
+function renderAction() {
   document.getElementById("sessionType").textContent =
-    state.workout.sessionType;
+    mockState.session.type;
   document.getElementById("sessionFocus").textContent =
-    state.workout.sessionFocus;
-  document.getElementById("nextMovement").textContent =
-    state.workout.nextMovement;
-  document.getElementById("sessionProgress").textContent =
-    `${state.workout.setsLogged} sets logged`;
+    mockState.session.focus;
+  document.getElementById("sessionMovement").textContent =
+    mockState.session.movement;
+  document.getElementById("setsLogged").textContent =
+    mockState.session.setsLogged;
 
-  // Prep
   document.getElementById("mealAName").textContent =
-    state.prep.mealAName;
+    mockState.meals.mealA.name;
+  document.getElementById("mealAServings").textContent =
+    mockState.meals.mealA.servings;
+
   document.getElementById("mealBName").textContent =
-    state.prep.mealBName;
+    mockState.meals.mealB.name;
+  document.getElementById("mealBServings").textContent =
+    mockState.meals.mealB.servings;
 
-  const prepStatus = document.getElementById("prepStatus");
-  if (!state.prep.started) {
-    prepStatus.textContent = "Prep not started.";
-  } else if (!state.prep.complete) {
-    prepStatus.textContent = "Prep in progress...";
-  } else {
-    prepStatus.textContent = "Prep complete. Meals ready.";
-  }
+  document.getElementById("prepStatus").textContent =
+    mockState.meals.prepStatus;
 
-  // Grocery
   document.getElementById("groceryItemsCount").textContent =
-    state.prep.groceryItems.length;
+    mockState.grocery.items.length;
+
   document.getElementById("groceryCost").textContent =
-    state.prep.estCost;
+    "$" + mockState.grocery.estCost;
 
   const groceryList = document.getElementById("groceryList");
   groceryList.innerHTML = "";
-  state.prep.groceryItems.forEach(item => {
+
+  mockState.grocery.items.forEach((item) => {
     const li = document.createElement("li");
     li.textContent = item;
     groceryList.appendChild(li);
   });
-
-  // Suit sync
-  document.getElementById("neuralLink").textContent = "SYNCED";
-  document.getElementById("motorAssist").textContent = "READY";
-  document.getElementById("powerRouting").textContent = "OPTIMAL";
-  document.getElementById("sensorArray").textContent = "CALIBRATED";
-  document.getElementById("stealthField").textContent =
-    state.context.missionMode ? "ENGAGED" : "IDLE";
-
-  // Mission mode
-  document.getElementById("missionModeStatus").textContent =
-    `Mission mode: ${state.context.missionMode ? "ON" : "OFF"}`;
-
-  // Field sensor matrix
-  document.getElementById("envStress").textContent =
-    state.env.stress;
-  document.getElementById("envVolatility").textContent =
-    state.env.volatility;
-  document.getElementById("envTemp").textContent =
-    state.env.temp;
-  document.getElementById("envHumidity").textContent =
-    state.env.humidity;
-
-  // Diagnostic line
-  document.getElementById("diagnosticLine").textContent =
-    generateDiagnosticLine(state);
 }
 
-// Boot + wiring
-window.addEventListener("load", () => {
-  const boot = document.getElementById("boot-screen");
-  const hud = document.getElementById("suit-hud");
+// ===============================
+//   RENDER: SYSTEMS + ENV
+// ===============================
 
-  setTimeout(() => {
-    boot.classList.add("hidden");
-    hud.classList.remove("hidden");
-    document.getElementById("systemStatus").textContent =
-      "// SYSTEM ACTIVE";
-    playBeep(700, 120, 0.12);
-    renderHUD();
-  }, 1500);
+function renderSystems() {
+  document.getElementById("neuralLinkStatus").textContent =
+    mockState.systems.neuralLink;
+  document.getElementById("missionMode").textContent =
+    mockState.systems.missionMode;
+}
 
-  // Buttons
-  document.getElementById("btnJustAte").addEventListener("click", () => {
-    state.context.lastMealAt = new Date();
-    playBeep(820, 80);
-    renderHUD();
+function renderEnv() {
+  document.getElementById("envStress").textContent = mockState.env.stress;
+  document.getElementById("envNoise").textContent = mockState.env.noise;
+  document.getElementById("envTemp").textContent = mockState.env.temp;
+  document.getElementById("envHumidity").textContent =
+    mockState.env.humidity;
+}
+// ===============================
+//   TAB NAVIGATION
+// ===============================
+
+function setupTabs() {
+  const buttons = document.querySelectorAll(".tab-button");
+  const screens = document.querySelectorAll(".screen");
+
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      buttons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      const target = btn.getAttribute("data-target");
+
+      screens.forEach((screen) => {
+        screen.classList.toggle("active", screen.id === target);
+      });
+    });
+  });
+}
+
+// ===============================
+//   COLLAPSIBLE PANELS
+// ===============================
+
+function setupCollapsibles() {
+  document.querySelectorAll("[data-collapsible]").forEach((panel) => {
+    const toggle = panel.querySelector(".collapse-toggle");
+    const body = panel.querySelector(".panel-body");
+
+    if (!toggle || !body) return;
+
+    panel.classList.add("collapsed");
+    body.style.maxHeight = "0";
+
+    toggle.addEventListener("click", () => {
+      const isCollapsed = panel.classList.contains("collapsed");
+
+      if (isCollapsed) {
+        panel.classList.remove("collapsed");
+        body.style.maxHeight = body.scrollHeight + "px";
+      } else {
+        panel.classList.add("collapsed");
+        body.style.maxHeight = "0";
+      }
+    });
+  });
+}
+
+// ===============================
+//   ACTION BUTTONS
+// ===============================
+
+function setupActions() {
+  const logSetButton = document.getElementById("logSetButton");
+  logSetButton.addEventListener("click", () => {
+    mockState.session.setsLogged += 1;
+    document.getElementById("setsLogged").textContent =
+      mockState.session.setsLogged;
   });
 
-  document.getElementById("btnSleepy").addEventListener("click", () => {
-    state.context.sleepyNow = true;
-    state.metrics.operationalStatus = Math.max(
-      0,
-      state.metrics.operationalStatus - 10
-    );
-    state.metrics.loadStrain = Math.min(
-      100,
-      state.metrics.loadStrain + 8
-    );
-    playBeep(500, 120);
-    renderHUD();
+  const startPrepButton = document.getElementById("startPrepButton");
+  const completePrepButton = document.getElementById("completePrepButton");
+
+  startPrepButton.addEventListener("click", () => {
+    mockState.meals.prepStatus = "Prep in progress...";
+    document.getElementById("prepStatus").textContent =
+      mockState.meals.prepStatus;
   });
 
-  document.getElementById("btnCompleteSet").addEventListener("click", () => {
-    state.workout.setsLogged += 1;
-    state.metrics.loadStrain = Math.min(
-      100,
-      state.metrics.loadStrain + 4
-    );
-    state.metrics.operationalStatus = Math.max(
-      0,
-      state.metrics.operationalStatus - 1
-    );
-    playBeep(1000, 70);
-    renderHUD();
+  completePrepButton.addEventListener("click", () => {
+    mockState.meals.prepStatus = "Prep complete. Meals ready.";
+    document.getElementById("prepStatus").textContent =
+      mockState.meals.prepStatus;
   });
+}
 
-  document.getElementById("btnStartPrep").addEventListener("click", () => {
-    state.prep.started = true;
-    state.prep.complete = false;
-    playBeep(780, 90);
-    renderHUD();
-  });
+// ===============================
+//   INIT
+// ===============================
 
-  document.getElementById("btnCompletePrep").addEventListener("click", () => {
-    if (!state.prep.started) {
-      state.prep.started = true;
-    }
-    state.prep.complete = true;
-    playBeep(620, 140);
-    renderHUD();
-  });
+function init() {
+  renderHUD();
+  renderDaily();
+  renderAction();
+  renderSystems();
+  renderEnv();
 
-  document.getElementById("btnViewGrocery").addEventListener("click", () => {
-    // Just beep + re-render for now
-    playBeep(880, 80);
-    renderHUD();
-  });
+  setupTabs();
+  setupCollapsibles();
+  setupActions();
 
-  document.getElementById("btnToggleMission").addEventListener("click", () => {
-    state.context.missionMode = !state.context.missionMode;
-    playBeep(state.context.missionMode ? 1050 : 650, 100);
-    if (state.context.missionMode) {
-      document.documentElement.classList.add("mission-active");
-    } else {
-      document.documentElement.classList.remove("mission-active");
-    }
-    renderHUD();
-  });
-
-  // Periodic small updates (pulse)
   setInterval(() => {
-    // Tiny drift to make it feel alive
-    state.metrics.fieldConditions = Math.max(
-      0,
-      Math.min(100, state.metrics.fieldConditions + (Math.random() * 4 - 2))
-    );
-    renderHUD();
-  }, 8000);
-});
+    document.getElementById("timestamp").textContent = formatTimestamp();
+  }, 1000);
+}
+
+document.addEventListener("DOMContentLoaded", init);
